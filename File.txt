@@ -1,0 +1,69 @@
+﻿# ファイル操作関係
+
+# du -s
+# なぜか GnuWin32 の du.exe より格段に速い
+ls -Force -Recurse | measure -Sum Length
+
+# Subversion のワーキングコピーのトップディレクトリを探す
+# .svn フォルダに I 属性をつけていると Windows Search で見つけにくく
+# ワーキングコピーのサブディレクトリもワーキングコピーなので
+# トップディレクトリだけを見つけたい
+# 使い方の例
+# 1. 以下の関数を定義
+# 2. Find-SvnWorkingCopy((gi .)) | tee -variable wcs | select fullname
+# 3. $wcs 変数に結果が格納されているのであとはご自由に
+function Find-SvnWorkingCopy([IO.DirectoryInfo]$d){
+	try{
+		$chidDirs = $d.GetDirectories();
+	}catch{
+		# Cannot list directory contents
+		Write-Warning $d.FullName
+		return;
+	}
+	foreach($childDir in $chidDirs) {
+		if($childDir.Name -eq ".svn") {
+			echo $d;
+			# WC's subdirectories are also WCs. No recursive calls required.
+			return;
+		}
+	}
+	foreach($childDir in $chidDirs) {
+		Find-SvnWorkingCopy($childDir);
+	}
+}
+
+# 継承されていない ACE をもつディレクトリ・ファイルを探す
+# ls -Recurse -Force |? {Has-UninheritedACE($_)} | tee -variable x | select fullname
+# ネットワーク越しだと通信量が多いので要改善
+# 	GetAccessControl に引数指定？[Security.AccessControl.AccessControlSections]::Access と指定しても変わらないような
+# 	Enter-PSSession でリモーティング？ただしデフォルトではAdministratorsのみリモーティング可能
+function Has-UninheritedACE($info){
+	try{
+		$acl = $info.GetAccessControl();
+		foreach($ace in $acl.Access) {
+			if(! $ace.IsInherited) {
+				return $True;
+			}
+		}
+		return $False;
+	}catch{
+		Write-Warning $info;
+	}
+}
+
+# カレントディレクトリ直下のファイル・ディレクトリに I 属性を付ける
+# attrib.exe /s がなぜかうまくいかないときに用いる
+# ls のオプションで -Recurse や -Filter や -Force を使ったり
+# パイプで where を挟んだりするのが一般的
+ls |% {
+	$a = $_.Attributes;
+	if(0 -eq ($a -band [IO.FileAttributes]::NotContentIndexed)) {
+		$a = $a -bor [IO.FileAttributes]::NotContentIndexed;
+		$_.Attributes = $a;
+	}
+}
+
+# カレントディレクトリ配下から I 属性を探す
+# 実用上では ls に -Recurse や -Force オプションを付けるのが一般的
+ls |? { 0 -ne ($_.Attributes -band [IO.FileAttributes]::NotContentIndexed) }
+

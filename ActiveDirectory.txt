@@ -1,0 +1,68 @@
+﻿# Active Directory
+
+# Server 2003 R2 のデフォルトでは Active Directory の
+# PowerShell モジュールがないので、WMI 経由で操作する。
+# Server 2008 R2 に移行したら PowerShell 経由で操作したい。
+# 
+# 参考
+# PowerShellを使用したWindows Serverの管理
+# http://www.slideshare.net/junichia/powershellwindows-server
+# 
+# Active Directory のタイムスタンプに関するメモ
+# Active Directory の epoch も NTFS の epoch もともに 1601-01-01 で
+# 単位が 100 nano-sec であるため同じ値となる。
+# よって Active Directory のタイムスタンプを
+# ローカルタイムゾーンの DateTime に変換するときには
+# [DateTime]::FromFileTime を用いることができる。
+# 
+# PowerShell Community Extensions にも Active Direcory 関連のものがあるみたい。
+# http://pscx.codeplex.com/
+
+# ドメインのコンピュータを最終ログオン時刻でソート。
+# 使われていないコンピュータを探すために用いる。
+# 14日程度経過しないと前回の値を上書きしないので値は正確ではない。
+gwmi -ComputerName higgs -Namespace Root\Directory\LDAP ds_computer |
+sort DS_lastLogonTimestamp,DS_cn |
+ft DS_cn,DS_operatingSystem,@{Name="LastLogonTimestamp (Local time zone)";
+	Expression={
+		[DateTime]::FromFileTime($_.DS_lastLogonTimestamp)
+	}
+}
+
+# ドメインのユーザを最終ログオン時刻でソート。
+# 使われていないユーザアカウントを探すために用いる。
+# 14日程度経過しないと前回の値を上書きしないので値は正確ではない。
+gwmi -ComputerName higgs -Namespace Root\Directory\LDAP ds_user |
+? {($_.DS_userAccountControl -band 2) -eq 0} | # 無効アカウントを除外
+sort DS_lastLogonTimestamp,DS_cn |
+ft DS_cn,DS_sAMAccountName,@{Name="LastLogonTimestamp (Local time zone)";
+	Expression={
+		[DateTime]::FromFileTime($_.DS_lastLogonTimestamp)
+	}
+}
+
+# ユーザの User-Account-Control でグループ化。
+# パスワードが無期限 (0x00010000) になっているかなどの調査で用いる。
+# フラグの意味は http://msdn.microsoft.com/en-us/library/ms680832(VS.85).aspx を参照。
+gwmi -ComputerName higgs -Namespace Root\Directory\LDAP ds_user |
+group DS_userAccountControl |
+select Count,
+	@{Name="Flags";Expression={"0x{0:X8}" -F $_.Values[0]}},
+	@{Name="Accounts";Expression={
+		[string]::Join(" ", @($_.Group |% {$_.DS_sAMAccountName} | sort))
+	}
+} |
+sort Flags |
+ft -AutoSize -Wrap
+
+# パスワードを間違えた回数でグループ化。
+# ブルートフォースなどの検出に用いる。
+# DS_badPwdCount はレプリケートされないので
+# 各々のドメインコントローラに問い合わせる必要がある。
+gwmi -ComputerName higgs -Namespace Root\Directory\LDAP ds_user |
+? {$_.DS_badPwdCount -ge 1} |
+sort DS_badPwdCount |
+ft -GroupBy DS_badPwdCount DS_cn,DS_sAMAccountName,@{Name="badPasswordTime (Local time zone)";Expression={
+	[DateTime]::FromFileTime($_.DS_badPasswordTime)
+}}
+

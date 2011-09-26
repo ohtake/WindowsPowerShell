@@ -1,0 +1,26 @@
+﻿# ファイルサーバ
+
+# higgs で開かれているファイルを調べる。
+openfiles /query /s higgs /fo csv /v | ConvertFrom-Csv
+
+# 自分が開いている Thumbs.db を閉じる。
+# Windows Explorer が Thumbs.db を開いてたままで
+# フォルダの移動や削除ができないときに使う。
+# 言語設定が英語になっていることを想定したカラム名。
+openfiles /query /s higgs /fo csv /v | ConvertFrom-Csv |
+? {
+	$_."Accessed By" -eq (gi Env:\USERNAME).Value.ToUpper() -and
+	$_."Open File (Path\executable)" -match "\\Thumbs\.db$"
+} |
+% {openfiles /disconnect /s higgs /id $_.ID}
+
+# DFSレプリケーションでの競合を列挙する。
+# ヒント
+# DfsrConflictInfo のプロパティで人間が見て価値があるのは
+# Conflict* のパターンにマッチするプロパティ程度なので、
+# ft Conflict* とか select Conflict* | ogv などとすると読みやすい。
+# DfsrConflictInfo のメソッドには Delete() があり、
+# そのメソッドを呼び出すことで ConflictAndDeleted からのファイル削除と
+# ConflictAndDeletedManifest.xml からのエントリ削除ができる。
+gwmi -ComputerName berkelium -Namespace Root\MicrosoftDfs -Class DfsrConflictInfo
+

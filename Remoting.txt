@@ -1,0 +1,7 @@
+﻿# Remoting
+
+# higgs に接続
+# 事前に higgs で Enable-PSRemoting を実行しておく必要あり
+etsn higgs
+
+

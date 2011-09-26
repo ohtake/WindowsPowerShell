@@ -1,0 +1,86 @@
+﻿# vSphere PowerCLI
+# http://www.vmware.com/support/developer/PowerCLI/
+
+# vForum 2010 の資料もあるみたい
+# <file:\\higgs\projects\SaaS\参考資料\vmware\vForum2010\G04-VMware vSphere Technical Deep Dive Part3 (PowerCLIを使った自動化編).pdf>
+
+# bellevue に接続する。
+# ドメインメンバならば認証なし。
+# そうでなければユーザ名とパスワードのダイアログが出る。
+# ドメインメンバであるが別アカウントでログインしたい時は
+# -Credential (Get-Credential) オプションを付けるとよい。
+# -Password オプションはパスワードが見えちゃうので推奨できない。
+Connect-VIServer bellevue.win.soft.flab.fujitsu.co.jp
+
+# paastempl-slim という名前の vApp 配下の各VMのメモリサイズを384に変更する
+Get-VApp paastempl-slim | Get-VM | Set-VM -MemoryMB 384
+
+# フォルダごとに電源オンのVMのメモリ総量を計算する
+gi vi:\soft\vm | Get-Folder -NoRecursion | sort Name |% {
+	if($_.Name -match "^(groups|members)$"){
+		$_ | Get-Folder -NoRecursion | sort Name
+	}else{
+		$_
+	}
+} | select Name,@{
+	Name="MemoryMB";
+	Expression={
+		Get-VM -Location $_ |
+		? {$_.PowerState -eq "PoweredOn"} |
+		measure MemoryMB -Sum |
+		select *
+	}
+}
+
+# フォルダごとにディスク使用量を計算する
+# テンプレートは含まれない
+gi vi:\soft\vm | Get-Folder -NoRecursion | sort Name |% {
+	if($_.Name -match "^(groups|members)$"){
+		$_ | Get-Folder -NoRecursion | sort Name
+	}else{
+		$_
+	}
+} | select Name,@{
+	Name="UsedSpaceGB";
+	Expression={
+		Get-VM -Location $_ |
+		measure UsedSpaceGB -Sum |
+		select *
+	}
+}
+
+# データストアに存在するが使われていないディスクを探す。
+# Administrator で Connect-VIServer しておくこと。
+# 結構時間がかかる。(5分くらい?2010-10-22)
+$disksExisting = Get-DataStore | Get-HardDisk |% {$_.FileName};
+$disksUsed = Get-VM |% {$_; Get-Snapshot -VM $_} | Get-HardDisk |% {$_.FileName};
+$disksUsed += Get-Template | Get-HardDisk |% {$_.FileName};
+diff $disksExisting $disksUsed
+
+# 最終電源投入時刻
+# 元ネタ
+# http://blogs.vmware.com/vipowershell/2009/10/when-was-the-last-time-that-vm-was-powered-on.html
+# 元ネタのスクリプトは vCenter のUI言語に依存しているので、その依存を無くした版。
+# 関数定義してから Get-VM | Get-LastPowerOn などとする。
+# 長い間電源が投入されていないマシンを探すのならば
+# ? {$_.PowerState -eq "PoweredOff"} を挟んで処理数を減らすといい。
+function Get-LastPowerOn {
+	param(
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true, HelpMessage="VM")]
+		$VM
+	)
+	Process {
+		$poweredOnEvents = $VM | Get-VIEvent |? {$_ -is [VMware.Vim.VmPoweredOnEvent]};
+		$lastPoweredOnEvent = $poweredOnEvents | sort CreatedTime -Descending | select -First 1;
+		$lastPoweredOn = $null;
+		if ($lastPoweredOnEvent) {
+			$lastPoweredOn = $lastPoweredOnEvent.CreatedTime;
+		}
+		
+		$obj = New-Object PSObject;
+		$obj | Add-Member -MemberType NoteProperty -Name VM -Value $_;
+		$obj | Add-Member -MemberType NoteProperty -Name PowerState -Value $_.PowerState;
+		$obj | Add-Member -MemberType NoteProperty -Name LastPoweron -Value $lastPoweredOn;
+		Write-Output $obj;
+	}
+}

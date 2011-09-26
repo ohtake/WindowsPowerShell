@@ -1,0 +1,40 @@
+﻿# カレントディレクトリ内の PowerPoint ファイルのうち
+# ファイル名が数字で始まるものを辞書順に結合する。
+ls |? {$_.Name -match "^[0-9].*\.pptx?$"} | sort Name |% -Begin {
+	Add-Type -AssemblyName office;
+	$app = New-Object -ComObject PowerPoint.Application;
+	$app.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue;
+	$ppt = $null;
+} -Process {
+	if (! $ppt) {
+		$ppt = $app.Presentations.Open($_.FullName);
+		$count = $ppt.Slides.Count;
+	} else {
+		$count = $ppt.Slides.InsertFromFile($_.FullName, $ppt.Slides.Count);
+	}
+	$_ | select Name,LastWriteTime,@{Name="SlideCount";Expression={$count}};
+} -End {
+	$ppt.SaveAs((Join-Path $PWD.ProviderPath ("Combined-" + (Get-Date -Format "yyyyMMdd'T'HHmmss"))));
+	$ppt.Close();
+}
+
+# カレントディレクトリ内の Excel ファイルのフッタを一括更新する。
+# *.xls のフィルタで xlsx も引っかかるみたい。
+ls -Filter *.xls |% -Begin {
+	$excel = New-Object -ComObject Excel.Application;
+	# $excel.Visible = $true;
+} -Process {
+	$book = $excel.Workbooks.Open($_.Fullname);
+	foreach($i in 1..$book.Worksheets.Count) {
+		$sheet = $book.Worksheets.Item($i);
+		$pageSetup = $sheet.PageSetup;
+		$pageSetup.LeftFooter = "New Left Footer";
+		$pageSetup.CenterFooter = "New Center Footer";
+		$pageSetup.RightFooter = "New Right Footer";
+	}
+	$book.Save();
+	$book.Close();
+} -End {
+	$excel.Quit();
+}
+

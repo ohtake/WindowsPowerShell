@@ -1,0 +1,29 @@
+﻿# Acrobat
+
+# Adobe Reader は COM オブジェクトが公開されていないので
+# COM オートメーションをするには Acrobat を使う必要がある。
+# 30日間の体験版でも可能。
+
+# カレントディレクトリ内のPDFをテキストに変換する。
+# pdftotext などより品質や成功度が格段に高いが Acrobat なのでとにかく重い。
+# 警告やエラーのたびにダイアログボックスが出てきてOKを押さないと次に進まないので、
+# キーを勝手に連打したり勝手にボタンを押してくれるツールを併用した方がいい。
+# 終了時に Acrobat のプロセスが残っていたら kill すること。
+ls -Filter *.pdf |% {
+	echo $_;
+	$a = New-Object -ComObject AcroExch.AVDoc;
+	$a.Open($_.Fullname, "strTitle") | Out-Null;
+	$p = $a.GetPDDoc();
+	$j = $p.GetJSObject();
+	$t = $j.GetType();
+	$t.InvokeMember(
+		"SaveAs",
+		[Reflection.BindingFlags]::InvokeMethod -bor [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Instance,
+		$null,
+		$j,
+		@([IO.Path]::ChangeExtension($_.Fullname, "txt"), "com.adobe.acrobat.plain-text"));
+	$p.Close() | Out-Null;
+	$a.Close($true) | Out-Null;
+}
+
+
