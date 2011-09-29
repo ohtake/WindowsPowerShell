@@ -9,7 +9,7 @@ openfiles /query /s higgs /fo csv /v | ConvertFrom-Csv
 # 言語設定が英語になっていることを想定したカラム名。
 openfiles /query /s higgs /fo csv /v | ConvertFrom-Csv |
 ? {
-	$_."Accessed By" -eq (gi Env:\USERNAME).Value.ToUpper() -and
+	$_."Accessed By" -eq $Env:USERNAME.Value.ToUpper() -and
 	$_."Open File (Path\executable)" -match "\\Thumbs\.db$"
 } |
 % {openfiles /disconnect /s higgs /id $_.ID}
