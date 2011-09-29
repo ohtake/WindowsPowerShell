@@ -27,6 +27,8 @@ ls -Filter *.pdf |% {
 }
 
 # PDFファイルの結合
+# なんと ファイル > 結合 > ファイルを単一のPDFに結合 だなんてものがありました。
+# PowerShell からやったほうが結合速度が速いので残しておきます。
 $a = New-Object -ComObject AcroExch.AVDoc;
 $p = $null;
 $isFirst = $true;
