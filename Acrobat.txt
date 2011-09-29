@@ -23,7 +23,28 @@ ls -Filter *.pdf |% {
 		$j,
 		@([IO.Path]::ChangeExtension($_.Fullname, "txt"), "com.adobe.acrobat.plain-text"));
 	$p.Close() | Out-Null;
-	$a.Close($true) | Out-Null;
+	$a.Close(1) | Out-Null; # Positive: Don't ask
 }
 
+# PDFファイルの結合
+$a = New-Object -ComObject AcroExch.AVDoc;
+$p = $null;
+$isFirst = $true;
+ls -Filter *.pdf | sort |% {
+	if($isFirst) {
+		$isFirst = $false;
+		$a.Open($_.Fullname, "strTitle") | Out-Null;
+		$p = $a.GetPDDoc();
+	} else {
+		$a2 = New-Object -ComObject AcroExch.AVDoc;
+		$a2.Open($_.Fullname, "strTitle") | Out-Null;
+		$p2 = $a2.GetPDDoc();
+		$p.InsertPages(($p.GetNumPages()-1), $p2, 0, $p2.GetNumPages(), 0) | Out-Null;
+		$p2.Close() | Out-Null;
+		$a2.Close(1) | Out-Null;
+	}
+}
+$p.Save(1, (Join-Path (pwd) "_COMBINED_.pdf")); # PDSaveFull = 1
+$p.Close() | Out-Null;
+$a.Close(1) | Out-Null;
 
