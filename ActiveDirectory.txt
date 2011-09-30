@@ -49,7 +49,7 @@ group DS_userAccountControl |
 select Count,
 	@{Name="Flags";Expression={"0x{0:X8}" -F $_.Values[0]}},
 	@{Name="Accounts";Expression={
-		[string]::Join(" ", @($_.Group |% {$_.DS_sAMAccountName} | sort))
+		@($_.Group |% {$_.DS_sAMAccountName} | sort) -Join " "
 	}
 } |
 sort Flags |
