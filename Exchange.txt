@@ -1,0 +1,38 @@
+﻿# /sns/ja/index.php?command=getarticle&asid=6747000&aid=20344002001
+# 2012年10月5日 コマンドラインからの Exchange 会議予約例
+# 会議が通常の予定と違うことは MeetingStatus を olMeeting にしておくこと、 Recipient の Type を olRequired, olOptional, olResource から選んでおくこと、最後は Save ではなく Send とすること、くらいかな。Send する前に内容を確認したければ Send の代わりに Display とするとよいでしょう。
+
+$outlook = New-Object -ComObject Outlook.Application
+$appointment = $outlook.CreateItem([Microsoft.Office.Interop.Outlook.OlItemType]::olAppointmentItem)
+$appointment.MeetingStatus = [Microsoft.Office.Interop.Outlook.OlMeetingStatus]::olMeeting
+$appointment.Subject = "test from powershell"
+$appointment.Start = [DateTime]::Parse("2012-12-03T07:00")
+$appointment.End = [DateTime]::Parse("2012-12-03T08:00")
+$appointment.Location = "Room 1"
+# $appointment.Recipients.Add("foo@example.com").Type = [Microsoft.Office.Interop.Outlook.OlMeetingRecipientType]::olRequired
+# $appointment.Recipients.Add("bar@example.com").Type = [Microsoft.Office.Interop.Outlook.OlMeetingRecipientType]::olOptional
+$appointment.Recipients.Add("room1@example.com").Type = [Microsoft.Office.Interop.Outlook.OlMeetingRecipientType]::olResource
+# $appointment.Display()
+$appointment.Send()
+
+# /sns/ja/index.php?command=getarticle&asid=6747000&aid=20433002001
+# 2012年10月10日 他人のカレンダーに PowerShell からアクセスする
+# CreateRecipient の戻り値がなぜか Recipient 型でないために GetSharedDefaultFolder が呼び出せないので、リフレクションで無理やり呼び出さざるをえず。 http://social.technet.microsoft.com/Forums/en-NZ/winserverpowershell/thread/d2be63c9-c921-43d2-b13c-6ba83b8af506 により 
+# 読み取り対象のカレンダーに対して「全詳細情報」が必要で、その権限がないと上記スクリプトでは読み取れません。人間のカレンダーはデフォルトで読み取り許可が「空き時間情報、件名、場所」となっているので、「全詳細情報」に変えておく必要があります。
+
+$outlook = New-Object -ComObject Outlook.Application
+$r = $outlook.Session.CreateRecipient("hogehoge@example.com")
+$f = [Microsoft.Office.Interop.Outlook.NameSpaceClass].GetMethod("GetSharedDefaultFolder").Invoke($outlook.Session, @($r, [Microsoft.Office.Interop.Outlook.OlDefaultFolders]::olFolderCalendar))
+# $f.Items | ft Subject,Start,End
+## $f.Items だと過去のスケジュールもすべて取得してきてしまうので、件数が多いと時間がかかってしまいます。そういう場合には Table を使うとよいです。
+# $cols = @("Start","End","Subject","Location") # カラムは適宜設定
+# $t = $f.GetTable(("[Start] >= '{0:yyyy/MM/dd}' AND [Start] < '{1:yyyy/MM/dd}'" -f (Get-Date),((Get-Date).AddMonths(2)))) # 期間も適宜設定
+# $t.Columns.RemoveAll()
+# $cols |% { $t.Columns.Add($_) | Out-Null }
+# $items = while($t.EndOfTable -eq $false) {
+#     $row = $t.GetNextRow()
+#     $obj = @{}
+#     $cols |% { $obj[$_] = $row.Item($_) }
+#     New-Object PSObject -Property $obj
+# }
+
